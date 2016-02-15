@@ -1,191 +1,222 @@
 
-import java.util.Arrays;
-import java.util.Scanner;
+import java.util.*;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
+/**
+ * Save humans, destroy zombies!
+ *
+ */
 class Player {
 
-  public static class Field {
+    public int x, y, tox = 0, toy = 0;
 
-    public int x, y;
-
-    public Field(int x, int y) {
-      this.x = x;
-      this.y = y;
-    }
-  }
-
-  public int x, y, timeJumps;
-
-  public static int moveToX = 0, moveToY = 0;
-
-  public static int[][] map;
-
-  public static int maxX = 35, maxY = 20, gameRound = 0;
-
-  public static Player myPlayer, enemies[];
-
-  public static void main(String args[]) {
-    map = new int[maxX][maxY];
-    myPlayer = new Player();
-
-    Scanner in = new Scanner(System.in);
-    int opponentCount = in.nextInt(); // Opponent count
-    enemies = new Player[opponentCount];
-    for (int i = 0; i < opponentCount; i++) {
-      enemies[i] = new Player();
+    public Player(int x, int y) {
+        this.x = x;
+        this.y = y;
     }
 
-    while (true) {
-      gameRound = in.nextInt();
-      myPlayer.x = in.nextInt(); // Your x position
-      myPlayer.y = in.nextInt(); // Your y position
-      myPlayer.timeJumps = in.nextInt(); // Remaining back in time
+    public static void main(String args[]) {
+        Scanner in = new Scanner(System.in);
 
-      for (int i = 0; i < opponentCount; i++) {
-        enemies[i].x = in.nextInt();
-        enemies[i].y = in.nextInt();
-        enemies[i].timeJumps = in.nextInt();
-      }
-
-      for (int i = 0; i < 20; i++) {
-        String line = in.next(); // One line of the map ('.' = free, '0' = you, otherwise the id of the opponent)
-        int length = line.length();
-        for (int c = 0; c < length; c++) {
-          char ownedBy = line.charAt(c);
-          if (ownedBy == '.') {
-            map[c][i] = -1;
-          } else {
-            map[c][i] = ownedBy - '0';
-          }
+        Player player;
+        HashMap<Integer, Human> humans = new HashMap<>();
+        HashMap<Integer, Zombie> zombies = new HashMap<>();
+        int x = in.nextInt();
+        int y = in.nextInt();
+        player = new Player(x, y);
+        int humanCount = in.nextInt();
+        for (int i = 0; i < humanCount; i++) {
+            int humanId = in.nextInt();
+            int humanX = in.nextInt();
+            int humanY = in.nextInt();
+            humans.put(humanId, new Human(humanId, humanX, humanY));
         }
-      }
-
-      createSquare();
-//      System.err.println(map[0][0]);
-//      System.err.println(map[enemies[0].x][enemies[0].y]);
-      System.out.println(moveToX + " " + moveToY); // action: "x y" to move or "BACK rounds" to go back in time
-    }
-  }
-
-  public static void createSquare() {
-    if (map[moveToX][moveToY] == -1 && moveToX != myPlayer.x && moveToY != myPlayer.y) {
-      return;
-    }
-
-    int hX = maxX / 2;
-    int hY = maxY / 2;
-    int ix, iy;
-    if (myPlayer.x < hX && myPlayer.y < hY) { //Left Top
-      ix = -1;
-      iy = -1;
-    } else if (myPlayer.x < hX && myPlayer.y >= hY) { // Left Bot
-      ix = -1;
-      iy = 1;
-    } else if (myPlayer.x >= hX && myPlayer.y < hY) { // Right Top
-      ix = 1;
-      iy = -1;
-    } else if (myPlayer.x >= hX && myPlayer.y >= hY) { // Right Bot
-      ix = 1;
-      iy = 1;
-    }
-
-    for (int x = 0; x < 4; x++) {
-      for (int y = 0; y < 4; y++) {
-
-      }
-    }
-  }
-
-//  public static void findNearestCorner() {
-//    int hX = maxX / 2;
-//    int hY = maxY / 2;
-////    if
-//  }
-
-  public static int distanceToNearestEnemy(Player enemies[]) {
-    return Arrays.stream(enemies).map((Player enemy) -> calcDistance(myPlayer, enemy)).min((Integer d1, Integer d2) -> d1.compareTo(d2)).get();
-  }
-
-  public static int distanceToEnemy(Player enemy) {
-    return calcDistance(myPlayer, enemy);
-  }
-
-  public static void move() {
-    if (map[moveToX][moveToY] == -1 && moveToX != myPlayer.x && moveToY != myPlayer.y) {
-      return;
-    }
-
-    moveToX = myPlayer.x;
-    moveToY = myPlayer.y;
-    if (myPlayer.x + 1 < maxX && map[myPlayer.x + 1][myPlayer.y] < 0) {
-      moveToX += 1;
-    } else if (myPlayer.x - 1 >= 0 && map[myPlayer.x - 1][myPlayer.y] < 0) {
-      moveToX -= 1;
-    } else if (myPlayer.y + 1 < maxY && map[myPlayer.x][myPlayer.y + 1] < 0) {
-      moveToY += 1;
-    } else if (myPlayer.y - 1 >= 0 && map[myPlayer.x + 1][myPlayer.y - 1] < 0) {
-      moveToY -= 1;
-    } else {
-      Field freeField = findFreeField();
-      moveToX = freeField.x;
-      moveToY = freeField.y;
-    }
-  }
-
-  public static Field findFreeField() {
-    for (int x = 0; x < maxX; x++) {
-      for (int y = 0; y < maxY; y++) {
-        if (map[x][y] == -1) {
-          return new Field(x, y);
+        int zombieCount = in.nextInt();
+        for (int i = 0; i < zombieCount; i++) {
+            int zombieId = in.nextInt();
+            int zombieX = in.nextInt();
+            int zombieY = in.nextInt();
+            int zombieXNext = in.nextInt();
+            int zombieYNext = in.nextInt();
+            zombies.put(zombieId, new Zombie(zombieXNext, zombieYNext, zombieId, zombieX, zombieY));
         }
-      }
+
+        decide(player, humans, zombies);
+        // game loop
+        while (true) {
+            player.x = in.nextInt();
+            player.y = in.nextInt();
+            humanCount = in.nextInt();
+            final Set<Integer> humanKeys = new HashSet<>();
+            for (int i = 0; i < humanCount; i++) {
+                int humanId = in.nextInt();
+                humanKeys.add(humanId);
+                Human human = humans.get(humanId);
+                human.x = in.nextInt();
+                human.y = in.nextInt();
+            }
+            Iterator<Integer> humanIterator = humans.keySet().stream().filter((Integer t) -> !humanKeys.contains(t)).collect(Collectors.toList()).iterator();
+            for (Iterator<Integer> iterator = humanIterator; iterator.hasNext();) {
+                humans.remove(iterator.next());
+            }
+            zombieCount = in.nextInt();
+            final Set<Integer> zombieKeys = new HashSet<>();
+            for (int i = 0; i < zombieCount; i++) {
+                int zombieId = in.nextInt();
+                zombieKeys.add(zombieId);
+                Zombie zombie = zombies.get(zombieId);
+                zombie.x = in.nextInt();
+                zombie.y = in.nextInt();
+                zombie.nx = in.nextInt();
+                zombie.ny = in.nextInt();
+            }
+            Iterator<Integer> zombieIterator = zombies.keySet().stream().filter((Integer t) -> !zombieKeys.contains(t)).collect(Collectors.toList()).iterator();
+            for (Iterator<Integer> iterator = zombieIterator; iterator.hasNext();) {
+                zombies.remove(iterator.next());
+            }
+
+            decide(player, humans, zombies);
+        }
     }
-    return new Field(0, 0);
-  }
 
-  public static int calcDistance(int x, int y, Field f2) {
-    return calcDistance(x, y, f2.x, f2.y);
-  }
+    private static void decide(Player player, HashMap<Integer, Human> humans, HashMap<Integer, Zombie> zombies) {
+        List<Human> savable = getSavable(player, humans, zombies);
+        Iterator<Human> iterator = savable.iterator();
+        if (iterator.hasNext()) {
+            Human next = iterator.next();
+//            System.err.println("Human " + next.id);
+            Zombie zombie = getNearestZombie(next, zombies);
+            System.err.println("Zombie " + zombie.id + " " + getDistance(next, zombie));
+//            System.err.println("Zombie " + zombies.get(21).id + " " + getDistance(next, zombies.get(21)));
+            List<Zombie> zombiesInRange = getZombiesInRange(player, zombie, zombies);
+            if (zombiesInRange.size() > 2) {
+                int x = 0, y = 0;
+                for (Zombie zombieToCalc : zombiesInRange) {
+                    x += zombieToCalc.x;
+                    y += zombieToCalc.y;
+                }
+                x /= zombiesInRange.size();
+                y /= zombiesInRange.size();
+                move(x, y, player);
+            } else {
+                move(zombie.x, zombie.y, player);
+            }
+        } else {
+            Human human = getNearestHuman(player, humans);
+            move(human.x, human.y, player);
+        }
+    }
 
-  public static int calcDistance(Field f, Field f2) {
-    return calcDistance(f.x, f.y, f2.x, f2.y);
-  }
+    private static List<Zombie> getZombiesInRange(Player player, Zombie zombie, HashMap<Integer, Zombie> zombies) {
+        int dx = zombie.x - player.x;
+        int dy = zombie.y - player.y;
+        return zombies.values().stream().filter(new Predicate<Zombie>() {
+            @Override
+            public boolean test(Zombie t) {
+                int tx = t.x - player.x;
+                int ty = t.y - player.y;
+                if (((tx <= 0 && dx <= 0) || (tx > 0 && dx > 0)) && ((ty <= 0 && dy <= 0) || (ty > 0 && dy > 0))) {
+                    if (getDistance(player, t) <= 3000) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+        }).collect(Collectors.toList());
+    }
 
-  public static int calcDistance(Player p, Player p2) {
-    return calcDistance(p.x, p.y, p2);
-  }
+    private static List<Human> getSavable(Player player, HashMap<Integer, Human> humans, HashMap<Integer, Zombie> zombies) {
+        return humans.values().stream().filter((Human t) -> {
+            Zombie nearestZombie = getNearestZombie(t, zombies);
+            int playerHuman = getDistance(player, t);
+            int humanZombie = getDistance(t, nearestZombie);
+            return ((playerHuman - 1600) / 1000) < (humanZombie) / 400;
+        }).sorted((Human o1, Human o2) -> {
+            Zombie nearestZombie1 = getNearestZombie(o1, zombies);
+            Zombie nearestZombie2 = getNearestZombie(o2, zombies);
+            return getDistance(nearestZombie1, o1) - getDistance(nearestZombie2, o2);
+        })
+            .collect(Collectors.toList());
+    }
 
-  public static int calcDistance(int x, int y, Player p) {
-    return calcDistance(x, y, p.x, p.y);
-  }
+    private static Human getNearestHuman(final Player player, HashMap<Integer, Human> humans) {
+        Optional<Human> min = humans.values().stream().min((Human z1, Human z2) -> {
+            int d1 = getDistance(player, z1);
+            int d2 = getDistance(player, z2);
+            return d1 - d2;
+        });
+        return min.get();
+    }
 
-  public static int calcDistance(int x, int y, int x2, int y2) {
-    int xd = Math.abs(x - x2);
-    int yd = Math.abs(y - y2);
-    return (int) Math.round(Math.sqrt((xd * xd) + (yd * yd)));
-  }
-//  public static void move() {
-//    moveToX = myPlayer.x;
-//    moveToY = myPlayer.y;
-//    if (myPlayer.x + 1 < maxX && map[myPlayer.x + 1][myPlayer.y] < 0) {
-//      moveToX += 1;
-//    } else if (myPlayer.x - 1 >= 0 && map[myPlayer.x - 1][myPlayer.y] < 0) {
-//      moveToX -= 1;
-//    } else if (myPlayer.y + 1 < maxY && map[myPlayer.x][myPlayer.y + 1] < 0) {
-//      moveToY += 1;
-//    } else if (myPlayer.y - 1 >= 0 && map[myPlayer.x + 1][myPlayer.y - 1] < 0) {
-//      moveToY -= 1;
-//    } else {
-//      if (myPlayer.x - 1 >= 0) {
-//        moveToX -= 1;
-//      } else {
-//        moveToX += 1;
-//      }
-//      if (myPlayer.y - 1 >= 0) {
-//        moveToY -= 1;
-//      } else {
-//        moveToY += 1;
-//      }
-//    }
-//  }
+    private static Zombie getNearestZombie(final Player player, HashMap<Integer, Zombie> zombies) {
+        Optional<Zombie> min = zombies.values().stream().min((Zombie z1, Zombie z2) -> {
+            int d1 = getDistance(player, z1);
+            int d2 = getDistance(player, z2);
+            return d1 - d2;
+        });
+        return min.get();
+    }
+
+    private static Zombie getNearestZombie(final Human human, HashMap<Integer, Zombie> zombies) {
+        Optional<Zombie> min = zombies.values().stream().min((Zombie z1, Zombie z2) -> {
+            int d1 = getDistance(human, z1);
+            int d2 = getDistance(human, z2);
+            return d1 - d2;
+        });
+        return min.get();
+    }
+
+    private static int getDistance(Human player, Human to) {
+        int x = player.x - to.x;
+        int y = player.y - to.y;
+        return (int) Math.sqrt((x * x) + (y * y));
+    }
+
+    private static int getDistance(Player player, Human to) {
+        int x = player.x - to.x;
+        int y = player.y - to.y;
+        return (int) Math.sqrt((x * x) + (y * y));
+    }
+
+    private static void move(int x, int y, Player player) {
+        player.tox = x;
+        player.toy = y;
+        System.out.println(x + " " + y); // Your destination coordinates
+    }
+
+    static class Human {
+
+        public int id, x, y;
+
+        public Human(int id, int x, int y) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    public static class Pos {
+
+        public int x, y;
+
+        public Pos(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    static class Zombie extends Human {
+
+        public int nx, ny;
+
+        public Zombie(int nx, int ny, int id, int x, int y) {
+            super(id, x, y);
+            this.nx = nx;
+            this.ny = ny;
+        }
+    }
 }
