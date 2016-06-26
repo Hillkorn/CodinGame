@@ -1,5 +1,6 @@
 
 import java.util.*;
+import java.util.function.Predicate;
 
 /**
  * Send your busters out into the fog to trap ghosts and bring them home!
@@ -13,13 +14,8 @@ class Player {
     static HashMap<Integer, Buster> enemyBusters = new HashMap<>();
 
     public static void main(String args[]) {
-        toDiscover = new Integer[SIZE_X / FIELD_SIZE + 1][SIZE_Y / FIELD_SIZE + 1];
-        for (int x = 0; x < toDiscover.length; x++) {
-            Integer[] rowToDiscover = toDiscover[x];
-            for (int y = 0; y < rowToDiscover.length; y++) {
-                rowToDiscover[y] = 0;
-            }
-        }
+        toDiscover = new ArrayList<>();
+        filloutDiscoveryList();
 
         Scanner in = new Scanner(System.in);
         bustersPerPlayer = in.nextInt(); // the amount of busters you control
@@ -27,11 +23,6 @@ class Player {
         myTeamId = in.nextInt(); // if this is 0, your base is on the top left of the map, if it is one, on the bottom right
         Coord myBaseCoords = getBaseCoords();
 
-        if (myTeamId == 0) {
-            toDiscover[0][0] = 1;
-        } else {
-            toDiscover[7][4] = 1;
-        }
         Integer lastBusted = -1;
 
         // game loop
@@ -51,6 +42,7 @@ class Player {
             }
             int i = 0;
             for (Buster buster : busters.values()) {
+                checkDiscovery(buster.x, buster.y);
                 i++;
                 if (buster.state == 1) {
                     Integer distBase = getDist(buster, myBaseCoords);
@@ -63,7 +55,7 @@ class Player {
 //                        moveTo(myBaseCoords);
                     }
                 } else if (ghosts.isEmpty()) {
-                    System.err.println("All emtpy");
+//                    System.err.println("All emtpy");
 //                    System.out.println("MOVE 8000 4500"); // MOVE x y | BUST id | RELEASE
                     discoverMove(buster);
                 } else {
@@ -94,9 +86,23 @@ class Player {
         }
     }
 
+    private static void filloutDiscoveryList() {
+        for (int x = 0; x < (SIZE_X / FIELD_SIZE + 1); x++) {
+            for (int y = 0; y < (SIZE_Y / FIELD_SIZE + 1); y++) {
+                int xC = x * FIELD_SIZE, yC = y * FIELD_SIZE;
+                if (!(x == 0 && y == 0 | x == (SIZE_X / FIELD_SIZE) && y == (SIZE_Y / FIELD_SIZE))
+                        && xC < (SIZE_X - 1000) && xC > (1000) && yC > 1000 && yC < (SIZE_Y - 1000)) {
+                    toDiscover.add(new Coord(x, y));
+                }
+            }
+        }
+        Collections.shuffle(toDiscover);
+    }
+
     private static void moveTo(Coord myBaseCoords) {
         System.out.println("MOVE " + myBaseCoords.x + " " + myBaseCoords.y);
     }
+
     private static Ghost getNextGhost(Buster buster, HashMap<Integer, Ghost> ghosts) {
         Integer currId = -1;
         Integer dist = Integer.MAX_VALUE;
@@ -117,19 +123,24 @@ class Player {
     }
 
     private static void discoverMove(Buster buster) {
-        for (int x = 0; x < toDiscover.length; x++) {
-            Integer[] rowToDiscover = toDiscover[x];
-            for (int y = 0; y < rowToDiscover.length; y++) {
-                if (rowToDiscover[y] == 0) {
-                    moveTo(new Coord(Math.min((x) * FIELD_SIZE, SIZE_X), Math.min((y) * FIELD_SIZE, SIZE_Y)));
-                }
-            }
+        if (toDiscover.isEmpty()) {
+            filloutDiscoveryList();
+            moveTo(new Coord(SIZE_X / 2, SIZE_Y / 2));
+        } else {
+            Coord next = toDiscover.get(0);
+            moveTo(new Coord(next.x * FIELD_SIZE, next.y * FIELD_SIZE));
         }
-        moveTo(new Coord(2200, 7000));
     }
 
     private static void checkDiscovery(int x, int y) {
-        toDiscover[x / FIELD_SIZE][y / FIELD_SIZE] = 1;
+        System.err.println("Before" + toDiscover.size());
+        toDiscover.removeIf((Coord t) -> {
+            if (t.x == (x / SIZE_X) && t.y == (y / SIZE_Y)) {
+                return true;
+            }
+            return false;
+        });
+        System.err.println("After" + toDiscover.size());
     }
 
     public static class Ghost extends Coord {
@@ -155,21 +166,20 @@ class Player {
         } else if (entityType == myTeamId) {
             System.err.println("Read B " + state + " " + value);
             setBuster(busters, entityId, x, y, state, value);
-            checkDiscovery(x, y);
         } else {
             setBuster(enemyBusters, entityId, x, y, state, value);
         }
     }
 
     private static void setGhost(int entityId, int x, int y, int value) {
-        if (ghosts.containsKey(entityId)) {
-            Ghost ghost = ghosts.get(entityId);
-            ghost.x = x;
-            ghost.y = y;
-            ghost.value = value;
-        } else {
-            ghosts.put(entityId, new Ghost(entityId, value, x, y));
-        }
+//        if (ghosts.containsKey(entityId)) {
+//            Ghost ghost = ghosts.get(entityId);
+//            ghost.x = x;
+//            ghost.y = y;
+//            ghost.value = value;
+//        } else {
+        ghosts.put(entityId, new Ghost(entityId, value, x, y));
+//        }
     }
 
     private static void setBuster(HashMap<Integer, Buster> busters, int entityId, int x, int y, int state, int value) {
@@ -180,7 +190,7 @@ class Player {
 //            buster.state = state;
 //            buster.value = value;
 //        } else {
-            busters.put(entityId, new Buster(entityId, state, value, x, y));
+        busters.put(entityId, new Buster(entityId, state, value, x, y));
 //        }
     }
 
@@ -237,5 +247,5 @@ class Player {
 
     static final Coord BASE_ONE = new Coord(0, 0), BASE_TWO = new Coord(16000, 9000);
 
-    static Integer[][] toDiscover;
+    static List<Coord> toDiscover;
 }
