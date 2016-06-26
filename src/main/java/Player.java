@@ -1,222 +1,241 @@
 
 import java.util.*;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
- * Save humans, destroy zombies!
+ * Send your busters out into the fog to trap ghosts and bring them home!
  *
  */
 class Player {
 
-    public int x, y, tox = 0, toy = 0;
-
-    public Player(int x, int y) {
-        this.x = x;
-        this.y = y;
-    }
+    static int ghostCount, myTeamId, bustersPerPlayer;
+    static HashMap<Integer, Ghost> ghosts = new HashMap<>();
+    static HashMap<Integer, Buster> busters = new HashMap<>();
+    static HashMap<Integer, Buster> enemyBusters = new HashMap<>();
 
     public static void main(String args[]) {
+        toDiscover = new Integer[SIZE_X / FIELD_SIZE + 1][SIZE_Y / FIELD_SIZE + 1];
+        for (int x = 0; x < toDiscover.length; x++) {
+            Integer[] rowToDiscover = toDiscover[x];
+            for (int y = 0; y < rowToDiscover.length; y++) {
+                rowToDiscover[y] = 0;
+            }
+        }
+
         Scanner in = new Scanner(System.in);
+        bustersPerPlayer = in.nextInt(); // the amount of busters you control
+        ghostCount = in.nextInt(); // the amount of ghosts on the map
+        myTeamId = in.nextInt(); // if this is 0, your base is on the top left of the map, if it is one, on the bottom right
+        Coord myBaseCoords = getBaseCoords();
 
-        Player player;
-        HashMap<Integer, Human> humans = new HashMap<>();
-        HashMap<Integer, Zombie> zombies = new HashMap<>();
-        int x = in.nextInt();
-        int y = in.nextInt();
-        player = new Player(x, y);
-        int humanCount = in.nextInt();
-        for (int i = 0; i < humanCount; i++) {
-            int humanId = in.nextInt();
-            int humanX = in.nextInt();
-            int humanY = in.nextInt();
-            humans.put(humanId, new Human(humanId, humanX, humanY));
+        if (myTeamId == 0) {
+            toDiscover[0][0] = 1;
+        } else {
+            toDiscover[7][4] = 1;
         }
-        int zombieCount = in.nextInt();
-        for (int i = 0; i < zombieCount; i++) {
-            int zombieId = in.nextInt();
-            int zombieX = in.nextInt();
-            int zombieY = in.nextInt();
-            int zombieXNext = in.nextInt();
-            int zombieYNext = in.nextInt();
-            zombies.put(zombieId, new Zombie(zombieXNext, zombieYNext, zombieId, zombieX, zombieY));
-        }
+        Integer lastBusted = -1;
 
-        decide(player, humans, zombies);
         // game loop
         while (true) {
-            player.x = in.nextInt();
-            player.y = in.nextInt();
-            humanCount = in.nextInt();
-            final Set<Integer> humanKeys = new HashSet<>();
-            for (int i = 0; i < humanCount; i++) {
-                int humanId = in.nextInt();
-                humanKeys.add(humanId);
-                Human human = humans.get(humanId);
-                human.x = in.nextInt();
-                human.y = in.nextInt();
+            int entities = in.nextInt(); // the number of busters and ghosts visible to you
+            for (int i = 0; i < entities; i++) {
+                int entityId = in.nextInt(); // buster id or ghost id
+                int x = in.nextInt();
+                int y = in.nextInt(); // position of this buster / ghost
+                int entityType = in.nextInt(); // the team id if it is a buster, -1 if it is a ghost.
+                int state = in.nextInt(); // For busters: 0=idle, 1=carrying a ghost.
+                int value = in.nextInt(); // For busters: Ghost id being carried. For ghosts: number of busters attempting to trap this ghost.
+                setEntity(entityId, x, y, entityType, state, value);
             }
-            Iterator<Integer> humanIterator = humans.keySet().stream().filter((Integer t) -> !humanKeys.contains(t)).collect(Collectors.toList()).iterator();
-            for (Iterator<Integer> iterator = humanIterator; iterator.hasNext();) {
-                humans.remove(iterator.next());
+            if (lastBusted >= 0) {
+//                System.err.println(ghosts.get(lastBusted));
             }
-            zombieCount = in.nextInt();
-            final Set<Integer> zombieKeys = new HashSet<>();
-            for (int i = 0; i < zombieCount; i++) {
-                int zombieId = in.nextInt();
-                zombieKeys.add(zombieId);
-                Zombie zombie = zombies.get(zombieId);
-                zombie.x = in.nextInt();
-                zombie.y = in.nextInt();
-                zombie.nx = in.nextInt();
-                zombie.ny = in.nextInt();
-            }
-            Iterator<Integer> zombieIterator = zombies.keySet().stream().filter((Integer t) -> !zombieKeys.contains(t)).collect(Collectors.toList()).iterator();
-            for (Iterator<Integer> iterator = zombieIterator; iterator.hasNext();) {
-                zombies.remove(iterator.next());
-            }
-
-            decide(player, humans, zombies);
-        }
-    }
-
-    private static void decide(Player player, HashMap<Integer, Human> humans, HashMap<Integer, Zombie> zombies) {
-        List<Human> savable = getSavable(player, humans, zombies);
-        Iterator<Human> iterator = savable.iterator();
-        if (iterator.hasNext()) {
-            Human next = iterator.next();
-//            System.err.println("Human " + next.id);
-            Zombie zombie = getNearestZombie(next, zombies);
-            System.err.println("Zombie " + zombie.id + " " + getDistance(next, zombie));
-//            System.err.println("Zombie " + zombies.get(21).id + " " + getDistance(next, zombies.get(21)));
-            List<Zombie> zombiesInRange = getZombiesInRange(player, zombie, zombies);
-            if (zombiesInRange.size() > 2) {
-                int x = 0, y = 0;
-                for (Zombie zombieToCalc : zombiesInRange) {
-                    x += zombieToCalc.x;
-                    y += zombieToCalc.y;
-                }
-                x /= zombiesInRange.size();
-                y /= zombiesInRange.size();
-                move(x, y, player);
-            } else {
-                move(zombie.x, zombie.y, player);
-            }
-        } else {
-            Human human = getNearestHuman(player, humans);
-            move(human.x, human.y, player);
-        }
-    }
-
-    private static List<Zombie> getZombiesInRange(Player player, Zombie zombie, HashMap<Integer, Zombie> zombies) {
-        int dx = zombie.x - player.x;
-        int dy = zombie.y - player.y;
-        return zombies.values().stream().filter(new Predicate<Zombie>() {
-            @Override
-            public boolean test(Zombie t) {
-                int tx = t.x - player.x;
-                int ty = t.y - player.y;
-                if (((tx <= 0 && dx <= 0) || (tx > 0 && dx > 0)) && ((ty <= 0 && dy <= 0) || (ty > 0 && dy > 0))) {
-                    if (getDistance(player, t) <= 3000) {
-                        return true;
+            int i = 0;
+            for (Buster buster : busters.values()) {
+                i++;
+                if (buster.state == 1) {
+                    Integer distBase = getDist(buster, myBaseCoords);
+                    System.err.println("DistBase " + distBase);
+                    if (distBase <= BASE_COLLECT_RANGE) {
+                        System.out.println("RELEASE");
                     } else {
-                        return false;
+                        System.err.println("Move to base " + myBaseCoords);
+                        System.out.println("MOVE " + myBaseCoords.x + " " + myBaseCoords.y);
+//                        moveTo(myBaseCoords);
                     }
+                } else if (ghosts.isEmpty()) {
+                    System.err.println("All emtpy");
+//                    System.out.println("MOVE 8000 4500"); // MOVE x y | BUST id | RELEASE
+                    discoverMove(buster);
                 } else {
-                    return false;
+                    Ghost ghost = getNextGhost(buster, ghosts);
+                    if (ghost == null) {
+                        System.err.println("NGhost is null");
+//                        System.err.println(buster);
+//                        System.out.println("MOVE 8000 4500"); // MOVE x y | BUST id | RELEASE
+                        discoverMove(buster);
+                    } else if (getDist(buster, ghost) <= BUST_RANGE_MAX) {
+                        System.err.println("Nearest is " + ghost.id + " " + getDist(buster, ghost));
+                        System.out.println("BUST " + ghost.id);
+//                        System.out.println("BUST " + ghost.id);
+                        System.err.println("BUST WRITTEN!!!");
+                        lastBusted = ghost.id;
+//                        ghost.value += 1;
+                        ghosts.remove(ghost.id);
+                    } else {
+                        System.err.println("Last move to" + ghost.x + " " + ghost.y);
+                        moveTo(ghost);
+//                        ghost.value += 1;
+                    }
+                }
+                // Write an action using System.out.println()
+                // To debug: System.err.println("Debug messages...");
+            }
+            System.err.println("Moved for " + i);
+        }
+    }
+
+    private static void moveTo(Coord myBaseCoords) {
+        System.out.println("MOVE " + myBaseCoords.x + " " + myBaseCoords.y);
+    }
+    private static Ghost getNextGhost(Buster buster, HashMap<Integer, Ghost> ghosts) {
+        Integer currId = -1;
+        Integer dist = Integer.MAX_VALUE;
+        for (Map.Entry<Integer, Ghost> ghostEntry : ghosts.entrySet()) {
+            Integer ghostId = ghostEntry.getKey();
+            Ghost ghost = ghostEntry.getValue();
+            if (ghost.value > 0) {
+                System.err.println(ghost);
+                continue;
+            }
+            Integer newDist = getDist(buster, ghost);
+            if (newDist < dist) {
+                currId = ghostId;
+                dist = newDist;
+            }
+        }
+        return ghosts.get(currId);
+    }
+
+    private static void discoverMove(Buster buster) {
+        for (int x = 0; x < toDiscover.length; x++) {
+            Integer[] rowToDiscover = toDiscover[x];
+            for (int y = 0; y < rowToDiscover.length; y++) {
+                if (rowToDiscover[y] == 0) {
+                    moveTo(new Coord(Math.min((x) * FIELD_SIZE, SIZE_X), Math.min((y) * FIELD_SIZE, SIZE_Y)));
                 }
             }
-        }).collect(Collectors.toList());
+        }
+        moveTo(new Coord(2200, 7000));
     }
 
-    private static List<Human> getSavable(Player player, HashMap<Integer, Human> humans, HashMap<Integer, Zombie> zombies) {
-        return humans.values().stream().filter((Human t) -> {
-            Zombie nearestZombie = getNearestZombie(t, zombies);
-            int playerHuman = getDistance(player, t);
-            int humanZombie = getDistance(t, nearestZombie);
-            return ((playerHuman - 1600) / 1000) < (humanZombie) / 400;
-        }).sorted((Human o1, Human o2) -> {
-            Zombie nearestZombie1 = getNearestZombie(o1, zombies);
-            Zombie nearestZombie2 = getNearestZombie(o2, zombies);
-            return getDistance(nearestZombie1, o1) - getDistance(nearestZombie2, o2);
-        })
-            .collect(Collectors.toList());
+    private static void checkDiscovery(int x, int y) {
+        toDiscover[x / FIELD_SIZE][y / FIELD_SIZE] = 1;
     }
 
-    private static Human getNearestHuman(final Player player, HashMap<Integer, Human> humans) {
-        Optional<Human> min = humans.values().stream().min((Human z1, Human z2) -> {
-            int d1 = getDistance(player, z1);
-            int d2 = getDistance(player, z2);
-            return d1 - d2;
-        });
-        return min.get();
-    }
+    public static class Ghost extends Coord {
 
-    private static Zombie getNearestZombie(final Player player, HashMap<Integer, Zombie> zombies) {
-        Optional<Zombie> min = zombies.values().stream().min((Zombie z1, Zombie z2) -> {
-            int d1 = getDistance(player, z1);
-            int d2 = getDistance(player, z2);
-            return d1 - d2;
-        });
-        return min.get();
-    }
+        int id, value;
 
-    private static Zombie getNearestZombie(final Human human, HashMap<Integer, Zombie> zombies) {
-        Optional<Zombie> min = zombies.values().stream().min((Zombie z1, Zombie z2) -> {
-            int d1 = getDistance(human, z1);
-            int d2 = getDistance(human, z2);
-            return d1 - d2;
-        });
-        return min.get();
-    }
-
-    private static int getDistance(Human player, Human to) {
-        int x = player.x - to.x;
-        int y = player.y - to.y;
-        return (int) Math.sqrt((x * x) + (y * y));
-    }
-
-    private static int getDistance(Player player, Human to) {
-        int x = player.x - to.x;
-        int y = player.y - to.y;
-        return (int) Math.sqrt((x * x) + (y * y));
-    }
-
-    private static void move(int x, int y, Player player) {
-        player.tox = x;
-        player.toy = y;
-        System.out.println(x + " " + y); // Your destination coordinates
-    }
-
-    static class Human {
-
-        public int id, x, y;
-
-        public Human(int id, int x, int y) {
+        public Ghost(int id, int value, Integer x, Integer y) {
+            super(x, y);
             this.id = id;
+            this.value = value;
+        }
+
+        @Override
+        public String toString() {
+            return "Ghost{" + "id=" + id + ", value=" + value + '}';
+        }
+
+    }
+
+    private static void setEntity(int entityId, int x, int y, int entityType, int state, int value) {
+        if (entityType == -1) {
+            setGhost(entityId, x, y, value);
+        } else if (entityType == myTeamId) {
+            System.err.println("Read B " + state + " " + value);
+            setBuster(busters, entityId, x, y, state, value);
+            checkDiscovery(x, y);
+        } else {
+            setBuster(enemyBusters, entityId, x, y, state, value);
+        }
+    }
+
+    private static void setGhost(int entityId, int x, int y, int value) {
+        if (ghosts.containsKey(entityId)) {
+            Ghost ghost = ghosts.get(entityId);
+            ghost.x = x;
+            ghost.y = y;
+            ghost.value = value;
+        } else {
+            ghosts.put(entityId, new Ghost(entityId, value, x, y));
+        }
+    }
+
+    private static void setBuster(HashMap<Integer, Buster> busters, int entityId, int x, int y, int state, int value) {
+//        if (busters.containsKey(entityId)) {
+//            Buster buster = busters.get(entityId);
+//            buster.x = x;
+//            buster.y = y;
+//            buster.state = state;
+//            buster.value = value;
+//        } else {
+            busters.put(entityId, new Buster(entityId, state, value, x, y));
+//        }
+    }
+
+    public static class Buster extends Coord {
+
+        Integer id, state, value;
+
+        public Buster(Integer id, Integer state, Integer value, Integer x, Integer y) {
+            super(x, y);
+            this.id = id;
+            this.state = state;
+            this.value = value;
+        }
+
+        @Override
+        public String toString() {
+            return "Buster{" + "id=" + id + ", state=" + state + ", value=" + value + '}';
+        }
+
+    }
+
+    public static class Coord {
+
+        Integer x, y;
+
+        public Coord(Integer x, Integer y) {
             this.x = x;
             this.y = y;
         }
-    }
 
-    public static class Pos {
-
-        public int x, y;
-
-        public Pos(int x, int y) {
-            this.x = x;
-            this.y = y;
+        @Override
+        public String toString() {
+            return "Coord{" + "x=" + x + ", y=" + y + '}';
         }
     }
 
-    static class Zombie extends Human {
+    public static Integer getDist(Coord c1, Coord c2) {
+        int x = Math.abs(c1.x - c2.x);
+        int y = Math.abs(c1.y - c2.y);
+        return new Double(Math.sqrt((x * x) + (y * y))).intValue();
+    }
 
-        public int nx, ny;
-
-        public Zombie(int nx, int ny, int id, int x, int y) {
-            super(id, x, y);
-            this.nx = nx;
-            this.ny = ny;
+    public static Coord getBaseCoords() {
+        if (myTeamId == 0) {
+            return BASE_ONE;
+        } else {
+            return BASE_TWO;
         }
     }
+
+    static final Integer FIELD_SIZE = 1600;
+
+    static final Integer BASE_COLLECT_RANGE = 1600, BUST_RANGE_MIN = 900, BUST_RANGE_MAX = 1760, FOG_DIST = 2200, SIZE_Y = 9000, SIZE_X = 16000;
+
+    static final Coord BASE_ONE = new Coord(0, 0), BASE_TWO = new Coord(16000, 9000);
+
+    static Integer[][] toDiscover;
 }
