@@ -40,10 +40,10 @@ class Thor1 {
 //        int X = in.nextInt();
 //        int Y = in.nextInt();
 //      }
-      Stream<Player.Position> enemiesStream = IntStream.range(0, N).mapToObj((int i) -> {
+      Stream<Thor1.Position> enemiesStream = IntStream.range(0, N).mapToObj((int i) -> {
         int X = in.nextInt();
         int Y = in.nextInt();
-        return new Player.Position(X, Y);
+          return new Thor1.Position(X, Y);
       });
 
       if (N > H) {
@@ -78,7 +78,7 @@ class Thor1 {
           stay();
         }
       } else {
-        Optional<Position> min = enemiesStream.min((Player.Position o1, Player.Position o2) -> {
+          Optional<Position> min = enemiesStream.min((Thor1.Position o1, Thor1.Position o2) -> {
           return calcDistance(o1) - calcDistance(o2);
         });
         if (calcDistance(min.get()) <= 1) {

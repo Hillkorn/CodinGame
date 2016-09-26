@@ -46,8 +46,8 @@ class Skynet {
     for (int i = 0; i < L; i++) {
       int N1 = in.nextInt(); // N1 and N2 defines a link between these nodes
       int N2 = in.nextInt();
-      Player.FieldNode node1 = nodes.get(N1);
-      Player.FieldNode node2 = nodes.get(N2);
+        Skynet.FieldNode node1 = nodes.get(N1);
+        Skynet.FieldNode node2 = nodes.get(N2);
       node1.links.add(node2);
       node2.links.add(node1);
     }
@@ -63,7 +63,7 @@ class Skynet {
     while (true) {
       int SI = in.nextInt(); // The index of the node on which the Skynet agent is positioned this turn
       visited.add(SI);
-      Player.FieldNode node = nodes.get(SI);
+        Skynet.FieldNode node = nodes.get(SI);
 
       System.err.println("Check for linked gateways");
       boolean blocked = false;

@@ -1,399 +1,49 @@
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * Send your busters out into the fog to trap ghosts and bring them home!
- *
+ * Hypersonic contest
  */
 class Player {
 
-    static int ghostCount, myTeamId, bustersPerPlayer;
-    static HashMap<Integer, Ghost> ghosts = new HashMap<>();
-    static HashMap<Integer, Buster> busters = new HashMap<>();
-    static HashMap<Integer, Buster> enemyBusters = new HashMap<>();
-    static List<Integer> enemiesToStun = new ArrayList<>();
-    static boolean discoveredAll = false;
+    static final int ENTITY_TYPE_PLAYER = 0, ENTITY_TYPE_BOMB = 1, ENTITY_TYPE_ITEM = 2;
 
-    public static void main(String args[]) {
-        enemiesToStun = new ArrayList<>();
-        toDiscover = new ArrayList<>();
-        filloutDiscoveryList();
-        discoveredAll = false;
+    static class PlayerEntity extends Coord {
 
-        Scanner in = new Scanner(System.in);
-        bustersPerPlayer = in.nextInt(); // the amount of busters you control
-        ghostCount = in.nextInt(); // the amount of ghosts on the map
-        myTeamId = in.nextInt(); // if this is 0, your base is on the top left of the map, if it is one, on the bottom right
-        Coord myBaseCoords = getBaseCoords();
+        int id, bombsLeft, explosionRange, territory;
 
-        Integer lastBusted = -1;
-        boolean firstDiscAll = false;
-
-        // game loop
-        while (true) {
-            enemiesToStun.clear();
-            for (Buster buster : busters.values()) {
-                buster.onGhost = null;
-            }
-            for (Buster enemy : enemyBusters.values()) {
-                enemy.vis = false;
-            }
-            for (Ghost ghost : ghosts.values()) {
-                ghost.vis = false;
-            }
-            int entities = in.nextInt(); // the number of busters and ghosts visible to you
-            for (int i = 0; i < entities; i++) {
-                int entityId = in.nextInt(); // buster id or ghost id
-                int x = in.nextInt();
-                int y = in.nextInt(); // position of this buster / ghost
-                int entityType = in.nextInt(); // the team id if it is a buster, -1 if it is a ghost.
-                int state = in.nextInt(); // For busters: 0=idle, 1=carrying a ghost.
-                int value = in.nextInt(); // For busters: Ghost id being carried. For ghosts: number of busters attempting to trap this ghost.
-                setEntity(entityId, x, y, entityType, state, value);
-            }
-            if (lastBusted >= 0) {
-//                System.err.println(ghosts.get(lastBusted));
-            }
-            System.err.println("DiscAll: " + discoveredAll);
-            if (!firstDiscAll && discoveredAll) {
-                if (choseCamperBuster(myBaseCoords)) {
-                    firstDiscAll = true;
-                }
-            }
-            Set<Integer> busterKeys = busters.keySet();
-            List<Integer> busterKeysSorted = busterKeys.stream().sorted().collect(Collectors.toList());
-            for (Integer busterKey : busterKeysSorted) {
-                String action = getBusterAction(busterKey, myBaseCoords);
-                System.out.println(action);
-            }
-        }
-    }
-
-    private static boolean choseCamperBuster(Coord myBaseCoords) {
-        Buster camperBuster = null;
-        int dist = 0;
-        for (Map.Entry<Integer, Buster> entry : busters.entrySet()) {
-            Buster buster = entry.getValue();
-            Integer newDist = getDist(myBaseCoords, buster);
-            if (!buster.isBustingGhost() && !buster.hasGhost() && buster.stunCD < 6) {
-                if (camperBuster == null) {
-                    camperBuster = buster;
-                    dist = newDist;
-                } else if (newDist > dist && buster.stunCD < 6) {
-                    camperBuster = buster;
-                }
-            }
-        }
-        if (camperBuster != null) {
-            camperBuster.role = Roles.CAMPER;
-            return true;
-        }
-        return false;
-    }
-
-    private static String getBusterAction(Integer busterKey, Coord myBaseCoords) {
-        Buster buster = busters.get(busterKey);
-        if (buster.stunCD > 0) {
-            buster.stunCD--;
-        }
-        checkDiscovery(buster);
-        if (buster.role != null) {
-            if (buster.role == Roles.CAMPER) {
-                return getBusterCamperAction(busterKey, myBaseCoords);
-            }
-        }
-        if (buster.isBustingGhost()) {
-            int enemiesOnGhost = 0;
-            int lastEnemyId = -1;
-            for (Map.Entry<Integer, Buster> entry : enemyBusters.entrySet()) {
-                Buster enemyBuster = entry.getValue();
-                if (enemyBuster.isBustingGhost() && enemyBuster.value == buster.value) {
-                    enemiesOnGhost++;
-                    if (!enemiesToStun.contains(enemyBuster.id)) {
-                        lastEnemyId = enemyBuster.id;
-                    }
-                }
-            }
-            if (enemiesOnGhost > 0) {
-                Ghost ghost = ghosts.get(buster.value);
-                if (ghost.hp - ghost.value <= 5 && ghost.value - enemiesOnGhost >= enemiesOnGhost && lastEnemyId >= 0) {
-                    return stunEnemy(lastEnemyId, buster);
-                }
-            }
-            return "BUST " + buster.value;
-        }
-        if (buster.state == 2) {
-            return moveTo(new Coord(0, 0));
-        }
-        if (buster.state == 1) {
-            for (Buster enemyBuster : enemyBusters.values()) {
-                if (!enemyBuster.isStunned() && getDist(buster, enemyBuster) <= STUN_RANGE && !enemiesToStun.contains(enemyBuster.id) && buster.stunCD <= 0) {
-                    return stunEnemy(enemyBuster.id, buster);
-                }
-            }
-            Integer distBase = getDist(buster, myBaseCoords);
-            System.err.println("DistBase " + distBase);
-            if (distBase <= BASE_COLLECT_RANGE) {
-                return "RELEASE";
-            } else {
-                System.err.println("Move to base " + myBaseCoords);
-                return "MOVE " + myBaseCoords.x + " " + myBaseCoords.y + " " + busterKey;
-            }
-        }
-        for (Buster enemyBuster : enemyBusters.values()) {
-            if (enemyBuster.vis && getDist(buster, enemyBuster) <= STUN_RANGE && !enemyBuster.isStunned() && (enemyBuster.hasGhost() || enemyBuster.isBustingGhost()) && !enemiesToStun.contains(enemyBuster.id)) {
-                return stunEnemy(enemyBuster.id, buster);
-            }
-        }
-        if (ghosts.isEmpty()) {
-            return discoverMove(buster);
-        } else {
-            Ghost ghost = getNextGhost(buster, ghosts, discoveredAll ? false : true, discoveredAll ? 100 : 20);
-            if (ghost == null) {
-                return discoverMove(buster);
-            }
-            Integer dist = getDist(buster, ghost);
-            if (ghost.vis && dist <= BUST_RANGE_MAX && dist >= BUST_RANGE_MIN) {
-                System.err.println("Nearest is " + ghost.id + " " + dist);
-                buster.onGhost = ghost.id;
-                return "BUST " + ghost.id;
-            } else {
-                if (dist < BUST_RANGE_MIN) {
-                    System.err.println("To close to ghost!");
-                }
-                return moveTo(ghost);
-            }
-        }
-    }
-
-    private static String stunEnemy(int enemyId, Buster buster) {
-        enemiesToStun.add(enemyId);
-        buster.stunCD = 20;
-        return "STUN " + enemyId;
-    }
-
-    private static void filloutDiscoveryList() {
-        discoveredAll = true;
-        for (int x = 0; x < (SIZE_X / FIELD_SIZE + 1); x++) {
-            for (int y = 0; y < (SIZE_Y / FIELD_SIZE + 1); y++) {
-                int xC = x * FIELD_SIZE, yC = y * FIELD_SIZE;
-                if (!(x == 0 && y == 0 | x == (SIZE_X / FIELD_SIZE) && y == (SIZE_Y / FIELD_SIZE))
-                        && xC < (SIZE_X - 800) && xC > (800) && yC > 400 && yC < (SIZE_Y - 400)) {
-                    toDiscover.add(new Coord(x, y));
-                }
-            }
-        }
-        Collections.shuffle(toDiscover);
-    }
-
-    private static String moveTo(Coord myBaseCoords) {
-        return "MOVE " + myBaseCoords.x + " " + myBaseCoords.y;
-    }
-
-    private static Ghost getNextGhost(Buster buster, HashMap<Integer, Ghost> ghosts, boolean visOnly, int maxHp) {
-        Ghost current = null;
-        Integer dist = -1;
-        for (Map.Entry<Integer, Ghost> ghostEntry : ghosts.entrySet()) {
-            Integer ghostId = ghostEntry.getKey();
-            Ghost ghost = ghostEntry.getValue();
-            if ((!ghost.vis && visOnly) || bustersOnGhost(ghost.id) > 2 || maxHp <= ghost.hp) {
-                continue;
-            }
-            Integer newDist = getDist(buster, ghost);
-            if (current == null) {
-                dist = newDist;
-                current = ghost;
-            } else {
-                int roundsToGhost = Math.abs(newDist - dist) / MOVE_RANGE;
-                if (roundsToGhost + ghost.hp < current.hp && newDist >= BUST_RANGE_MIN) {
-                    current = ghost;
-                    dist = newDist;
-                } else if (newDist < dist && newDist >= BUST_RANGE_MIN) {
-                    current = ghost;
-                    dist = newDist;
-                }
-            }
-        }
-        return current;
-    }
-
-    private static int bustersOnGhost(Integer ghostId) {
-        int bustersOnGhost = 0;
-        for (Buster buster : busters.values()) {
-            if (ghostId.equals(buster.onGhost)) {
-                bustersOnGhost++;
-            }
-        }
-        return bustersOnGhost;
-    }
-
-    private static String discoverMove(Buster buster) {
-        if (toDiscover.isEmpty()) {
-            filloutDiscoveryList();
-            return moveTo(new Coord(SIZE_X / 2, SIZE_Y / 2));
-        } else if (buster.discoverMove != null) {
-            return moveTo(new Coord(buster.discoverMove.x * FIELD_SIZE, buster.discoverMove.y * FIELD_SIZE));
-        } else {
-            Coord next = toDiscover.get(0);
-            toDiscover.remove(0);
-            buster.discoverMove = next;
-            return moveTo(new Coord(next.x * FIELD_SIZE, next.y * FIELD_SIZE));
-        }
-    }
-
-    private static void checkDiscovery(Buster buster) {
-        int x = buster.x, y = buster.y;
-        for (Buster busterOnDiscovery : busters.values()) {
-            if (busterOnDiscovery.discoverMove != null && busterOnDiscovery.discoverMove.x.equals(new Integer(x / FIELD_SIZE)) && busterOnDiscovery.discoverMove.y.equals(new Integer(y / FIELD_SIZE))) {
-                busterOnDiscovery.discoverMove = null;
-            }
-        }
-        toDiscover.removeIf((Coord t) -> {
-            if (t.x.equals(new Integer(x / FIELD_SIZE)) && t.y.equals(new Integer(y / FIELD_SIZE))) {
-                return true;
-            }
-            return false;
-        });
-        ArrayList<Integer> keysToRemove = new ArrayList<Integer>();
-        for (Map.Entry<Integer, Ghost> ghostSet : ghosts.entrySet()) {
-            Integer key = ghostSet.getKey();
-            Ghost ghost = ghostSet.getValue();
-            if (getDist(buster, ghost) < BUST_RANGE_MAX && !ghost.vis) {
-                keysToRemove.add(key);
-            }
-        }
-        if (!keysToRemove.isEmpty()) {
-            keysToRemove.forEach(key -> ghosts.remove(key));
-        }
-    }
-
-    private static void setEntity(int entityId, int x, int y, int entityType, int state, int value) {
-        if (entityType == -1) {
-            setGhost(entityId, x, y, state, value);
-        } else if (entityType == myTeamId) {
-            setBuster(busters, entityId, x, y, state, value);
-        } else {
-            setBuster(enemyBusters, entityId, x, y, state, value);
-        }
-    }
-
-    private static void setGhost(int entityId, int x, int y, int state, int value) {
-        if (ghosts.containsKey(entityId)) {
-            Ghost ghost = ghosts.get(entityId);
-            ghost.x = x;
-            ghost.y = y;
-            ghost.value = value;
-            ghost.hp = state;
-            ghost.vis = true;
-        } else {
-            Ghost ghost = new Ghost(entityId, value, state, x, y);
-            ghost.vis = true;
-            ghosts.put(entityId, ghost);
-        }
-    }
-
-    private static void setBuster(HashMap<Integer, Buster> busters, int entityId, int x, int y, int state, int value) {
-        Buster buster;
-        if (busters.containsKey(entityId)) {
-            buster = busters.get(entityId);
-            buster.x = x;
-            buster.y = y;
-            buster.state = state;
-            buster.value = value;
-            buster.vis = true;
-        } else {
-            buster = new Buster(entityId, state, value, x, y);
-            buster.vis = true;
-            busters.put(entityId, buster);
-        }
-        if (buster.hasGhost()) {
-            ghosts.remove(buster.value);
-        }
-    }
-
-    private static String getBusterCamperAction(Integer busterKey, Coord myBaseCoords) {
-        Buster buster = busters.get(busterKey);
-        Ghost nextGhost = getNextGhost(buster, ghosts, true, 3);
-        if (nextGhost != null) {
-            Integer dist = getDist(nextGhost, buster);
-            if (dist < FOG_DIST) {
-                if (dist < BUST_RANGE_MAX && dist > BUST_RANGE_MIN) {
-                    buster.role = Roles.NONE;
-                    choseCamperBuster(myBaseCoords);
-                    return "BUST " + nextGhost.id;
-                }
-            }
-        }
-        if (buster.hasGhost()) {
-            buster.role = Roles.NONE;
-            choseCamperBuster(myBaseCoords);
-            return moveTo(myBaseCoords);
-        } else if (buster.stunCD > 10) {
-            buster.role = Roles.NONE;
-            choseCamperBuster(myBaseCoords);
-            return getBusterAction(busterKey, myBaseCoords);
-        }
-        Coord enemyCampCoords = getEnemyCampingCoords();
-        Integer dist = getDist(enemyCampCoords, buster);
-        for (Map.Entry<Integer, Buster> entry : enemyBusters.entrySet()) {
-            Buster enemyBuster = entry.getValue();
-            if (enemyBuster.hasGhost() && getDist(enemyBuster, buster) <= STUN_RANGE && !enemiesToStun.contains(entry.getKey())) {
-                return stunEnemy(entry.getKey(), buster);
-            }
-        }
-        return moveTo(enemyCampCoords);
-    }
-
-    public static class Ghost extends Coord {
-
-        int id, value, hp;
-        boolean vis = false;
-
-        public Ghost(int id, int value, int state, Integer x, Integer y) {
+        public PlayerEntity(Integer x, Integer y) {
             super(x, y);
-            this.id = id;
-            this.value = value;
-            this.hp = state;
         }
-
-        @Override
-        public String toString() {
-            return "Ghost{" + "id=" + id + ", value=" + value + '}';
-        }
-
     }
 
-    public static class Buster extends Coord {
+    static class BombEntity extends Coord {
 
-        Integer id, state, value, onGhost = null;
-        int stunCD = 0;
-        Coord discoverMove = null;
-        boolean vis = false;
-        Roles role = Roles.NONE;
+        int owner, roundsLeft, explosionRange;
 
-        public Buster(Integer id, Integer state, Integer value, Integer x, Integer y) {
+        public BombEntity(Integer x, Integer y) {
             super(x, y);
-            this.id = id;
-            this.state = state;
-            this.value = value;
+        }
+    }
+
+    static class Field extends Coord {
+
+        int boxesInRange = 0, player = -1, bombExplosionIn = -1, entity = -1, itemType = -1, territory = -1;
+
+        Field(int x, int y, int entity) {
+            super(x, y);
+            this.entity = entity;
         }
 
-        @Override
-        public String toString() {
-            return "Buster{" + "id=" + id + ", state=" + state + ", value=" + value + '}';
+        boolean isMoveable() {
+            return entity == FIELD_TYPE_EMPTY || entity == FIELD_TYPE_ITEM;
         }
 
-        public boolean isStunned() {
-            return state == 2;
-        }
-
-        public boolean hasGhost() {
-            return state == 1;
-        }
-
-        public boolean isBustingGhost() {
-            return state == 3;
+        boolean isDestroyable() {
+            return entity == FIELD_TYPE_BOX || entity == FIELD_TYPE_ITEM;
         }
     }
 
@@ -412,38 +62,274 @@ class Player {
         }
     }
 
+    static final int FIELD_TYPE_EMPTY = 0, FIELD_TYPE_BOX = 1, FIELD_TYPE_BOMB = 2, FIELD_TYPE_ITEM = 4, FIELD_TYPE_WALL = 5, FIELD_TYPE_SOON_DESTROYED = 6;
+    static int myId, width, height, territoryCounter;
+    static Field[][] map;
+    static PlayerEntity myPlayer = new PlayerEntity(0, 0);
+    static PlayerEntity enemyPlayer = new PlayerEntity(0, 0);
+
+    public static void main(String args[]) {
+        Scanner in = new Scanner(System.in);
+        width = in.nextInt();
+        height = in.nextInt();
+        myId = in.nextInt();
+        map = new Field[height][width];
+        in.nextLine();
+
+        // game loop
+        while (true) {
+            territoryCounter = 0;
+            for (int y = 0; y < height; y++) {
+                String row = in.nextLine();
+                for (int x = 0; x < width; x++) {
+                    if (row.charAt(x) == '.') {
+                        map[y][x] = new Field(x, y, FIELD_TYPE_EMPTY);
+                    } else if (row.charAt(x) == 'X') {
+                        map[y][x] = new Field(x, y, FIELD_TYPE_WALL);
+                    } else {
+                        int boxItem = Integer.valueOf(row.charAt(x));
+                        map[y][x] = new Field(x, y, FIELD_TYPE_BOX);
+                        map[y][x].itemType = boxItem;
+                    }
+                }
+            }
+            int entities = in.nextInt();
+            boolean hasBomb = false;
+            boolean hasItem = false;
+            List<Field> items = new ArrayList<>();
+            for (int i = 0; i < entities; i++) {
+                int entityType = in.nextInt();
+                int owner = in.nextInt();
+                int x = in.nextInt();
+                int y = in.nextInt();
+                int bombsOrRoundsLeft = in.nextInt();
+                int explosionRange = in.nextInt();
+
+                if (entityType == ENTITY_TYPE_ITEM) {
+                    items.add(new Field(x, y, bombsOrRoundsLeft));
+                    map[y][x].entity = FIELD_TYPE_ITEM;
+                    hasItem = true;
+                } else if (entityType == ENTITY_TYPE_PLAYER) {
+                    if (owner == myId) {
+                        myPlayer.x = x;
+                        myPlayer.y = y;
+                        myPlayer.bombsLeft = bombsOrRoundsLeft;
+                        myPlayer.explosionRange = explosionRange;
+                    } else {
+                        enemyPlayer.x = x;
+                        enemyPlayer.y = y;
+                        enemyPlayer.bombsLeft = bombsOrRoundsLeft;
+                        enemyPlayer.explosionRange = explosionRange;
+                    }
+                }
+
+                if (entityType == ENTITY_TYPE_BOMB && myId == owner) {
+                    hasBomb = true;
+                }
+
+                if (entityType == ENTITY_TYPE_BOMB) {
+                    map[y][x].entity = FIELD_TYPE_BOMB;
+                    for (int exRange = 0; exRange < explosionRange; exRange++) {
+                        if (x - exRange >= 0) {
+
+                            if (map[y][x - exRange].entity == FIELD_TYPE_EMPTY && owner != myId) {
+                                map[y][x - exRange].bombExplosionIn = bombsOrRoundsLeft;
+                            } else if (map[y][x - exRange].entity == FIELD_TYPE_BOX) {
+                                map[y][x - exRange].entity = FIELD_TYPE_SOON_DESTROYED;
+                                map[y][x - exRange].bombExplosionIn = bombsOrRoundsLeft;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    for (int exRange = 0; exRange < explosionRange; exRange++) {
+                        if (x + exRange < width) {
+                            if (map[y][x + exRange].entity == FIELD_TYPE_EMPTY && owner != myId) {
+                                map[y][x + exRange].bombExplosionIn = bombsOrRoundsLeft;
+                            } else if (map[y][x + exRange].entity == FIELD_TYPE_BOX) {
+                                map[y][x + exRange].entity = FIELD_TYPE_SOON_DESTROYED;
+                                map[y][x + exRange].bombExplosionIn = bombsOrRoundsLeft;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    for (int exRange = 0; exRange < explosionRange; exRange++) {
+                        if (y - exRange >= 0) {
+                            if (map[y - exRange][x].entity == FIELD_TYPE_EMPTY && owner != myId) {
+                                map[y - exRange][x].bombExplosionIn = bombsOrRoundsLeft;
+                            } else if (map[y - exRange][x].entity == FIELD_TYPE_BOX) {
+                                map[y - exRange][x].entity = FIELD_TYPE_SOON_DESTROYED;
+                                map[y - exRange][x].bombExplosionIn = bombsOrRoundsLeft;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    for (int exRange = 0; exRange < explosionRange; exRange++) {
+                        if (y + exRange < height) {
+                            if (map[y + exRange][x].entity == FIELD_TYPE_EMPTY && owner != myId) {
+                                map[y + exRange][x].bombExplosionIn = bombsOrRoundsLeft;
+                            } else if (map[y + exRange][x].entity == FIELD_TYPE_BOX) {
+                                map[y + exRange][x].entity = FIELD_TYPE_SOON_DESTROYED;
+                                map[y + exRange][x].bombExplosionIn = bombsOrRoundsLeft;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            setTerritories(map);
+            in.nextLine();
+            myPlayer.territory = map[myPlayer.y][myPlayer.x].territory;
+
+            calcBestChests(map);
+
+            List<Field> bestFields = Stream.of(map)
+                    .flatMap(Stream::of)
+                    .filter(item -> item.boxesInRange > 0 && item.territory == myPlayer.territory && item.bombExplosionIn == -1)
+                    .sorted((Field o1, Field o2) -> (getDist(myPlayer, o1) - (o1.boxesInRange / 2)) - (getDist(myPlayer, o2) - (o2.boxesInRange / 2)))
+                    .collect(Collectors.toList());
+            Field bestField = null;
+            for (Field bestFieldOption : bestFields) {
+                if (bestFieldOption.entity == FIELD_TYPE_EMPTY) {
+                    bestField = bestFieldOption;
+                    break;
+                }
+            }
+            Field bestItem = null;
+            for (Field item : items) {
+                if (item.territory == myPlayer.territory && (bestItem == null || getDist(myPlayer, item) < getDist(myPlayer, bestItem))) {
+                    bestItem = item;
+                }
+            }
+            if (bestItem != null && getDist(myPlayer, bestItem) < 5) {
+                System.out.println("MOVE " + bestItem.x + " " + bestItem.y + " It will be mine HAHA");
+            } else if (bestField != null && bestField.boxesInRange > 0) {
+                if (myPlayer.bombsLeft > 0 && getDist(myPlayer, bestField) == 0) {
+                    System.out.println("BOMB " + myPlayer.x + " " + myPlayer.y + " Hyper Hyp! " + bestField.boxesInRange);
+                } else {
+                    System.out.println("MOVE " + bestField.x + " " + bestField.y + " GoGoGo " + bestField.boxesInRange);
+                }
+            } else {
+                int gx = -1, gy = -1;
+                int dist = 1000;
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        Integer newDist = getDist(myPlayer, new Coord(x, y));
+                        if (map[y][x].entity == FIELD_TYPE_BOX && newDist < dist) {
+                            gx = x;
+                            gy = y;
+                            dist = newDist;
+                        }
+                    }
+                    if (gx != -1) {
+                        break;
+                    }
+                }
+                if (hasItem && myPlayer.bombsLeft == 0) {
+                    Field item = findItem();
+                    if (item != null && getDist(item, myPlayer) < 4) {
+                        System.out.println("MOVE " + item.x + " " + item.y);
+                    } else {
+                        System.out.println("MOVE " + gx + " " + gy);
+                    }
+                } else if (gx != -1) {
+                    if (hasBomb) {
+                        System.out.println("MOVE " + gx + " " + gy);
+                    } else {
+                        System.out.println("BOMB " + gx + " " + gy + " Hyper Hyper!");
+                    }
+                } else {
+                    System.out.println("BOMB 6 5");
+                }
+            }
+        }
+    }
+
+    private static Field findItem() {
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (map[y][x].entity == FIELD_TYPE_ITEM) {
+                    return map[y][x];
+                }
+            }
+        }
+        return null;
+    }
+
     public static Integer getDist(Coord c1, Coord c2) {
         int x = Math.abs(c1.x - c2.x);
         int y = Math.abs(c1.y - c2.y);
-        return new Double(Math.sqrt((x * x) + (y * y))).intValue();
+//        return new Double(Math.sqrt((x * x) + (y * y))).intValue();
+        return x + y;
     }
 
-    public static Coord getBaseCoords() {
-        if (myTeamId == 0) {
-            return BASE_ONE;
-        } else {
-            return BASE_TWO;
+    private static void calcBestChests(Field[][] map) {
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (map[y][x].entity == FIELD_TYPE_BOX) {
+                    for (int expRange = 1; expRange < myPlayer.explosionRange; expRange++) {
+                        if (x + expRange < width && map[y][x + expRange].entity == FIELD_TYPE_EMPTY) {
+                            map[y][x + expRange].boxesInRange++;
+                        } else {
+                            break;
+                        }
+                    }
+                    for (int expRange = 1; expRange < myPlayer.explosionRange; expRange++) {
+                        if (x - expRange >= 0 && map[y][x - expRange].entity == FIELD_TYPE_EMPTY) {
+                            map[y][x - expRange].boxesInRange++;
+                        } else {
+                            break;
+                        }
+                    }
+                    for (int expRange = 1; expRange < myPlayer.explosionRange; expRange++) {
+                        if (y + expRange < height && map[y + expRange][x].entity == FIELD_TYPE_EMPTY) {
+                            map[y + expRange][x].boxesInRange++;
+                        } else {
+                            break;
+                        }
+                    }
+                    for (int expRange = 1; expRange < myPlayer.explosionRange; expRange++) {
+                        if (y - expRange > 0 && map[y - expRange][x].entity == FIELD_TYPE_EMPTY) {
+                            map[y - expRange][x].boxesInRange++;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
-    public static Coord getEnemyCampingCoords() {
-        if (myTeamId == 0) {
-            return new Coord(SIZE_X - 2300, SIZE_Y - 2300);
-        } else {
-            return new Coord(2300, 2300);
+    private static void setTerritories(Field[][] map) {
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Field current = map[y][x];
+                if (current.territory == -1 && (current.entity == FIELD_TYPE_EMPTY || current.entity == FIELD_TYPE_ITEM)) {
+                    int territory = territoryCounter++;
+                    calcTerritory(map, current, territory);
+                }
+            }
         }
     }
 
-    static final Integer FIELD_SIZE = 1600;
-
-    static final Integer BASE_COLLECT_RANGE = 1600, BUST_RANGE_MIN = 900, BUST_RANGE_MAX = 1760, FOG_DIST = 2200, SIZE_Y = 9000, SIZE_X = 16000;
-    static final Integer STUN_RANGE = 1760, MOVE_RANGE = 800;
-
-    static final Coord BASE_ONE = new Coord(0, 0), BASE_TWO = new Coord(16000, 9000);
-
-    static List<Coord> toDiscover;
-
-    static enum Roles {
-        NONE, CAMPER
+    private static void calcTerritory(Field[][] map, Field current, int territory) {
+        int x = current.x;
+        int y = current.y;
+        current.territory = territory;
+        if (x + 1 < width && map[y][x + 1].territory != territory && map[y][x + 1].isMoveable()) {
+            calcTerritory(map, map[y][x + 1], territory);
+        }
+        if (x - 1 >= 0 && map[y][x - 1].territory != territory && map[y][x - 1].isMoveable()) {
+            calcTerritory(map, map[y][x - 1], territory);
+        }
+        if (y + 1 < height && map[y + 1][x].territory != territory && map[y + 1][x].isMoveable()) {
+            calcTerritory(map, map[y + 1][x], territory);
+        }
+        if (y - 1 >= 0 && map[y - 1][x].territory != territory && map[y - 1][x].isMoveable()) {
+            calcTerritory(map, map[y - 1][x], territory);
+        }
     }
 }
